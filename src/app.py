@@ -8,7 +8,7 @@ from flask_swagger import swagger
 from flask_cors import CORS
 from utils import APIException, generate_sitemap
 from admin import setup_admin
-from models import db, User, People, Planets, Vehicles, Favorites
+from models import db, User, Characters, Planets, Vehicles, Favorites
 
 #from models import Person
 
@@ -47,10 +47,10 @@ def handle_hello():
         return jsonify(new_user), 200
     except  Exception as e:
         return jsonify({"error": str(e)})
-@app.route('/people', methods=['GET'])
-def get_people():
+@app.route('/characters', methods=['GET'])
+def get_characters():
     try:
-        characters = People.query.all()
+        characters = Characters.query.all()
         new_characters_list = []
         for character in characters:
             new_characters_list.append(character.serialize())  # es serialize porque en esa función definimos en el archivo models.py cuales son los datos que va a llamar de todos los que trae json
@@ -58,15 +58,15 @@ def get_people():
     except Exception as e:
         return jsonify({"error": str(e)})    
 
-@app.route('/people/<int:people_id>', methods=['GET'])
-def get_character(people_id):       # acá debo colocar adentro de la función que es a lo que quiero llamar más adelante, lo que viene siendo lo mismo a lo que comparo con el _id
+@app.route('/characters/<int:characters_id>', methods=['GET'])
+def get_character(characters_id):       # acá debo colocar adentro de la función que es a lo que quiero llamar más adelante, lo que viene siendo lo mismo a lo que comparo con el _id
         try:
-            characters = People.query.all()
+            characters = Characters.query.all()
             new_character_list = []
             for character in characters:
                 new_character_list.append(character.serialize())
             for one_character in new_character_list:
-                if one_character["id"] == people_id:
+                if one_character["id"] == characters_id:
                     return jsonify(one_character), 200
         except Exception as e:
             return jsonify({"error": str(e)})
@@ -126,51 +126,124 @@ def favorites():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/favorite/planet/<int:favorite_id>', methods=['POST'])      
-def add_planets(favorite_id):
+
+@app.route('/favorite/planet/<int:planet_id>', methods=['POST'])
+def add_favorite_planet(planet_id):                             # lo que tiene esta función como argumento es lo que me permitirá modificar el <int:planet_id>
     try:
-        favorite = Favorites.query.get_or_404(favorite_id)      # se obtiene el objeto de Favorites con el id dado (si existe lo obtiene, si no 404)
-
-        planet_id = request.json.get('planet_id')                              # se obtiene la data de planet en formato json
-
-        if Planets.query.filter_by(id=planet_id).first()in favorite.planets:
-            return jsonify({"error": "This planes is already in favorites list"}), 400       # se verifica que el planeta no esté en favoritos, en caso de estar se arroja error
+        user_id = request.json.get("user_id")  # se hace una petición en formato json para obtener la información respecto a user_id
         
-        planet = Planets.query.get_or_404(planet_id)            # se hace la solicitud del objeto de Planets correspondiente al id dado
-
-        favorite.favorite_planets.append(planet)
-        db.session.commit()                                     # se agrega el planeta a los favoritos del usuario
-
-
+        if user_id is None:
+            return jsonify({"msg": "missing 'user_id' in request JSON"}), 400
+        if not planet_id or not user_id: 
+            return jsonify({"msg": "to create a new favorite planet user_id and planets_id are requiered"}), 400
         
-        return jsonify({"done": "favorite planet has been added"}),200
-    except Exception as e:
-        return jsonify({"error": str(e)})  
+        new_favorite_planet = Favorites(user_id = user_id, planet_id=planet_id)  # se crea una nueva variable que contenga las igualdades de significancia entre el planets_id de models.py y el de acá (app.py) y de la misma manera con los users, donde el primero es el de models y el segundo el de app.py
+        
+        db.session.add(new_favorite_planet)     # se añade new_favorites en el clon
+        db.session.commit()                    # se guarda en la base de datos original
 
-
+        return jsonify({"done": "Favorite planet has been added succsesfully"}), 201        # unicamente es necesrio pasar en el postman el id del planeta en el URL y el user_id:<int:user_id> en el body
     
+    except Exception as e:
+        return jsonify(str(e)), 500
             
 
-@app.route('/favorite/<int:people_id>', methods=['POST'])       # por ende no puedo probar este tampoco
-def add_people(): 
-     favorite_people={
-          "msg": "no favorites by now"
-     }
-     return jsonify(favorite_people)
+@app.route('/favorite/character/<int:character_id>', methods=['POST'])
+def add_favorite_character(character_id):
+    try:
+        user_id = request.json.get("user_id")       # petición de información user_id contenida en el body
+        
+        if not user_id or not character_id:
+            return jsonify({"msg": "to create a favorite chatacter, user_id and character_id are requiered"}), 400      # manejo de errores
+        
+        new_favorite_character = Favorites(user_id=user_id, character_id=character_id)      # variable que crea dentro de Favorites una equivalencia entre valores de models.py y app.py
+        
+        db.session.add(new_favorite_character)      # se añade la función de equivalencias en el clon
+        db.session.commit()                        # se guarda primero en el clon y luego en la base de datos
+        
+        return jsonify({"done": "Favorite character has been added succesfully"}), 201
+    except Exception as e:
+        return jsonify(str(e)), 500
+
+@app.route('/favorite/vehicle/<int:vehicle_id>', methods=['POST'])
+def add_favorite_vehicle(vehicle_id):
+    try:
+        user_id= request.json.get("user_id")
+
+        if not user_id or not vehicle_id:
+            return jsonify({"msg": "to add a favorite vehicle, user_id and vehicle_id are requiered"}), 400
+        
+        new_favorite_vehicle = Favorites(user_id=user_id, vehicle_id=vehicle_id)
+
+        db.session.add(new_favorite_vehicle)
+        db.session.commit()
+
+        return jsonify({"done": "Favorite vehicle has been submited succesfully"}),201
+    except Exception as e:
+        return jsonify(str(e)), 500   
+
 
 @app.route('/favorite/planet/<int:planet_id>', methods=['DELETE'])
-def delete_planet():
-    delete={
-        "msg": "done"
-    }
-    return jsonify(delete)
+def delete_planet(planet_id):
+    try:
+        user_id = request.json.get("user_id")       # se solicita un usuario especifico del cual se va a eliminar el favorito                                               
+        if not user_id:
+            return jsonify({"msg": "the 'user_id' is missing from the request"}), 400    # si no existe 400
+        
+        favorite_planet = Favorites.query.filter_by(user_id=user_id, planet_id=planet_id).first()       # en se manda una petición que hace filtrado en Favorites, el filtrado busca que haya equivalencia entre user_id y planet_id
+        
+        if favorite_planet is None:
+            return jsonify({"msg": "the favorite planet with given user_id and planet_id does not exist"}), 404     # si no hay planeta registrado a ese usuario 404 not found
 
-@app.route('/favorite/people/<int:people_id>')
-def delete_people():
-    delete_p={
-        "msg": "done"
-    }
-    return jsonify(delete_p)
+        db.session.delete(favorite_planet)      #  se hace un borrado de lo obtenido con favorite planet y se guarda en el clon
+        db.session.commit()                     # guardado en base de datos
+
+        return jsonify({"done": "the favorite planet has been deleted successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+
+@app.route('/favorite/character/<int:character_id>', methods=['DELETE'])
+def delete_character(character_id):
+    try:
+        user_id = request.json.get("user_id")
+
+        if not user_id:
+            return jsonify({"msg": "the 'user_id' is missing from the request"}), 400
+        
+        favorite_character = Favorites.query.filter_by(user_id=user_id, character_id=character_id).first()
+        
+        if favorite_character is None:
+            return jsonify({"msg": "the favorite character with given user_id and character_id does not exist"}), 404
+        
+        db.session.delete(favorite_character)
+        db.session.commit()
+        
+        return jsonify({"done": "the favorite character has been deleted successfully"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    
+
+@app.route('/favorite/vehicle/<int:vehicle_id>', methods=['DELETE'])
+def delete_vehicle(vehicle_id):
+    try:
+        user_id = request.json.get("user_id")
+        if not user_id:
+            return jsonify({"msg": "the 'user_id' is missing from the request"}), 400
+        
+        favorite_vehicle = Favorites.query.filter_by(user_id=user_id, vehicle_id=vehicle_id).first()
+        
+        if favorite_vehicle is None:
+            return jsonify({"msg": "the favorite vehicle with given user_id and vehicle_id does not exist"}), 404
+
+        db.session.delete(favorite_vehicle)
+        db.session.commit()
+
+        return jsonify({"done": "the favorite vehicle has been deleted successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 # @app.route('/favorite/vehicle/<int:planet_id')
 # def get_favorite_vehicle():
